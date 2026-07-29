@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Business Profit Calculator (₦)</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --primary: #0f766e;
+      --primary-dark: #0d5c56;
+      --bg: #f0fdfa;
+      --card: #ffffff;
+      --text: #134e4a;
+      --danger: #dc2626;
+      --success: #16a34a;
+      --warning: #d97706;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 12px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    h1 {
+      text-align: center;
+      color: var(--primary);
+      margin: 16px 0;
+      font-size: 1.6rem;
+    }
+    .card {
+      background: var(--card);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    .tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 16px;
+    }
+    .tab {
+      flex: 1;
+      min-width: 100px;
+      padding: 10px 8px;
+      border: none;
+      border-radius: 8px;
+      background: #ccfbf1;
+      color: var(--primary);
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    .tab.active {
+      background: var(--primary);
+      color: white;
+    }
+    .section { display: none; }
+    .section.active { display: block; }
+    label {
+      display: block;
+      margin: 10px 0 4px;
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+    input, select, textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #99f6e4;
+      border-radius: 8px;
+      font-size: 1rem;
+      margin-bottom: 8px;
+    }
+    button.btn {
+      width: 100%;
+      padding: 12px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    button.btn:hover { background: var(--primary-dark); }
+    button.btn.secondary {
+      background: #0d9488;
+    }
+    button.btn.danger {
+      background: var(--danger);
+    }
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .metric {
+      background: #f0fdfa;
+      padding: 12px;
+      border-radius: 8px;
+      text-align: center;
+    }
+    .metric .label { font-size: 0.8rem; color: #64748b; }
+    .metric .value { font-size: 1.15rem; font-weight: 700; color: var(--primary); }
+    .metric.profit .value { color: var(--success); }
+    .metric.loss .value { color: var(--danger); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+    th, td {
+      padding: 8px 6px;
+      text-align: left;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    th { background: #ccfbf1; }
+    .status {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+    .status.excellent { background: #dcfce7; color: #166534; }
+    .status.good { background: #dbeafe; color: #1e40af; }
+    .status.fair { background: #fef3c7; color: #92400e; }
+    .status.loss { background: #fee2e2; color: #991b1b; }
+    .msg {
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      display: none;
+    }
+    .msg.success { background: #dcfce7; color: #166534; display: block; }
+    .msg.error { background: #fee2e2; color: #991b1b; display: block; }
+    .empty { text-align: center; color: #94a3b8; padding: 20px; }
+  </style>
+</head>
+<body>
+  <h1>Business Profit Calculator (₦)</h1>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="dashboard">Dashboard</button>
+    <button class="tab" data-tab="capital">Capital</button>
+    <button class="tab" data-tab="product">Add Product</button>
+    <button class="tab" data-tab="sale">Sales</button>
+    <button class="tab" data-tab="expense">Expense</button>
+    <button class="tab" data-tab="return">Return</button>
+    <button class="tab" data-tab="credit">Credit Pay</button>
+    <button class="tab" data-tab="inventory">Inventory</button>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="dashboard" class="section active">
+    <div class="card">
+      <h2 style="margin-bottom:12px;">Business Overview</h2>
+      <div class="metrics-grid" id="metrics"></div>
+      <div id="statusBox" style="margin-top:16px;"></div>
+      <button class="btn secondary" onclick="loadDashboard()" style="margin-top:12px;">Refresh</button>
+    </div>
+  </div>
+
+  <!-- CAPITAL -->
+  <div id="capital" class="section">
+    <div class="card">
+      <h2>Set / Update Capital</h2>
+      <label>Capital Amount (₦)</label>
+      <input type="number" id="capitalAmount" placeholder="e.g. 500000" min="0" step="0.01"/>
+      <button class="btn" onclick="setCapital()">Save Capital</button>
+      <div id="capitalMsg" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- ADD PRODUCT -->
+  <div id="product" class="section">
+    <div class="card">
+      <h2>Add Product to Inventory</h2>
+      <label>Product Name</label>
+      <input type="text" id="prodName" placeholder="e.g. Rice 50kg"/>
+      <label>Purchase Price (₦)</label>
+      <input type="number" id="prodBuy" min="0" step="0.01"/>
+      <label>Selling Price (₦)</label>
+      <input type="number" id="prodSell" min="0" step="0.01"/>
+      <label>Quantity</label>
+      <input type="number" id="prodQty" min="1"/>
+      <label>Unit</label>
+      <input type="text" id="prodUnit" value="pcs" placeholder="pcs, kg, packs..."/>
+      <button class="btn" onclick="addProduct()">Add Product</button>
+      <div id="prodMsg" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- SALES -->
+  <div id="sale" class="section">
+    <div class="card">
+      <h2>Record Sale</h2>
+      <label>Select Product</label>
+      <select id="saleProduct"></select>
+      <label>Quantity</label>
+      <input type="number" id="saleQty" min="1"/>
+      <label>Sale Type</label>
+      <select id="saleType">
+        <option value="cash">Cash Sale</option>
+        <option value="credit">Credit Sale</option>
+      </select>
+      <button class="btn" onclick="recordSale()">Record Sale</button>
+      <div id="saleMsg" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- EXPENSE -->
+  <div id="expense" class="section">
+    <div class="card">
+      <h2>Record Expense</h2>
+      <label>Amount (₦)</label>
+      <input type="number" id="expAmount" min="0" step="0.01"/>
+      <label>Description</label>
+      <input type="text" id="expDesc" placeholder="e.g. Transport, Rent, Fuel"/>
+      <button class="btn" onclick="recordExpense()">Save Expense</button>
+      <div id="expMsg" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- RETURN -->
+  <div id="return" class="section">
+    <div class="card">
+      <h2>Record Goods Return</h2>
+      <label>Sale Transaction ID</label>
+      <input type="text" id="returnSaleId" placeholder="Paste the sale ID"/>
+      <label>Quantity to Return (leave empty for all)</label>
+      <input type="number" id="returnQty" min="1"/>
+      <button class="btn" onclick="recordReturn()">Record Return</button>
+      <div id="returnMsg" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- CREDIT PAYMENT -->
+  <div id="credit" class="section">
+    <div class="card">
+      <h2>Record Credit Payment</h2>
+      <label>Credit Sale ID</label>
+      <input type="text" id="creditSaleId" placeholder="Paste the credit sale ID"/>
+      <label>Amount Paid (₦)</label>
+      <input type="number" id="creditAmount" min="0" step="0.01"/>
+      <button class="btn" onclick="recordCreditPayment()">Record Payment</button>
+      <div id="creditMsg" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- INVENTORY -->
+  <div id="inventory" class="section">
+    <div class="card">
+      <h2>Current Inventory</h2>
+      <div id="inventoryTable"></div>
+    </div>
+  </div>
+
+  <script>
+    // ==================== SUPABASE CONFIG ====================
+    const SUPABASE_URL = 'YOUR_SUPABASE_URL';          // ← Replace this
+    const SUPABASE_KEY = 'YOUR_SUPABASE_ANON_KEY';        // ← Replace this
+
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // ==================== TABS ====================
+    document.querySelectorAll('.tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(btn.dataset.tab).classList.add('active');
+        if (btn.dataset.tab === 'dashboard') loadDashboard();
+        if (btn.dataset.tab === 'sale') loadProductsSelect();
+        if (btn.dataset.tab === 'inventory') loadInventory();
+      });
+    });
+
+    // ==================== HELPERS ====================
+    function showMsg(id, text, type = 'success') {
+      const el = document.getElementById(id);
+      el.textContent = text;
+      el.className = `msg ${type}`;
+      setTimeout(() => el.className = 'msg', 4000);
+    }
+
+    function formatNaira(n) {
+      return '₦' + Number(n).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    // ==================== CAPITAL ====================
+    async function setCapital() {
+      const amount = parseFloat(document.getElementById('capitalAmount').value);
+      if (!amount || amount <= 0) return showMsg('capitalMsg', 'Enter a valid amount', 'error');
+
+      const { error } = await supabase
+        .from('business_settings')
+        .upsert({ id: 1, capital: amount, updated_at: new Date().toISOString() });
+
+      if (error) return showMsg('capitalMsg', error.message, 'error');
+
+      // Also record as transaction
+      await supabase.from('transactions').insert({
+        type: 'capital',
+        amount: amount,
+        description: 'Capital set/updated',
+        payment_status: 'paid'
+      });
+
+      showMsg('capitalMsg', `Capital set to ${formatNaira(amount)}`);
+      document.getElementById('capitalAmount').value = '';
+    }
+
+    // ==================== PRODUCTS ====================
+    async function addProduct() {
+      const name = document.getElementById('prodName').value.trim();
+      const buy = parseFloat(document.getElementById('prodBuy').value);
+      const sell = parseFloat(document.getElementById('prodSell').value);
+      const qty = parseInt(document.getElementById('prodQty').value);
+      const unit = document.getElementById('prodUnit').value.trim() || 'pcs';
+
+      if (!name || isNaN(buy) || isNaN(sell) || isNaN(qty) || qty < 1) {
+        return showMsg('prodMsg', 'Please fill all fields correctly', 'error');
+      }
+
+      const { data, error } = await supabase.from('products').insert({
+        name, purchase_price: buy, selling_price: sell, quantity: qty, unit
+      }).select().single();
+
+      if (error) return showMsg('prodMsg', error.message, 'error');
+
+      // Record purchase as expense
+      await supabase.from('transactions').insert({
+        type: 'expense',
+        amount: buy * qty,
+        description: `Bought ${qty} ${unit} of ${name}`,
+        product_id: data.id,
+        quantity: qty,
+        payment_status: 'paid'
+      });
+
+      showMsg('prodMsg', `Product "${name}" added successfully`);
+      ['prodName','prodBuy','prodSell','prodQty'].forEach(id => document.getElementById(id).value = '');
+    }
+
+    async function loadProductsSelect() {
+      const { data } = await supabase.from('products').select('*').order('name');
+      const select = document.getElementById('saleProduct');
+      select.innerHTML = data?.length
+        ? data.map(p => `<option value="\( {p.id}"> \){p.name} (Stock: ${p.quantity} \( {p.unit}) - ₦ \){p.selling_price}</option>`).join('')
+        : '<option value="">No products yet</option>';
+    }
+
+    // ==================== SALES ====================
+    async function recordSale() {
+      const productId = document.getElementById('saleProduct').value;
+      const qty = parseInt(document.getElementById('saleQty').value);
+      const isCredit = document.getElementById('saleType').value === 'credit';
+
+      if (!productId || !qty || qty < 1) return showMsg('saleMsg', 'Select product and quantity', 'error');
+
+      const { data: product } = await supabase.from('products').select('*').eq('id', productId).single();
+      if (!product) return showMsg('saleMsg', 'Product not found', 'error');
+      if (product.quantity < qty) return showMsg('saleMsg', `Only ${product.quantity} left in stock`, 'error');
+
+      const amount = product.selling_price * qty;
+
+      // Update stock
+      await supabase.from('products').update({ quantity: product.quantity - qty }).eq('id', productId);
+
+      // Create transaction
+      const { data: tx, error } = await supabase.from('transactions').insert({
+        type: isCredit ? 'credit_sale' : 'sale',
+        amount,
+        description: `Sold ${qty} ${product.unit} of ${product.name}`,
+        product_id: productId,
+        quantity: qty,
+        payment_status: isCredit ? 'unpaid' : 'paid'
+      }).select().single();
+
+      if (error) return showMsg('saleMsg', error.message, 'error');
+
+      showMsg('saleMsg', `${isCredit ? 'Credit' : 'Cash'} sale recorded: ${formatNaira(amount)} (ID: ${tx.id.slice(0,8)}...)`);
+      document.getElementById('saleQty').value = '';
+      loadProductsSelect();
+    }
+
+    // ==================== EXPENSE ====================
+    async function recordExpense() {
+      const amount = parseFloat(document.getElementById('expAmount').value);
+      const desc = document.getElementById('expDesc').value.trim();
+      if (!amount || amount <= 0 || !desc) return showMsg('expMsg', 'Enter amount and description', 'error');
+
+      const { error } = await supabase.from('transactions').insert({
+        type: 'expense',
+        amount,
+        description: desc,
+        payment_status: 'paid'
+      });
+
+      if (error) return showMsg('expMsg', error.message, 'error');
+      showMsg('expMsg', `Expense of ${formatNaira(amount)} recorded`);
+      document.getElementById('expAmount').value = '';
+      document.getElementById('expDesc').value = '';
+    }
+
+    // ==================== RETURN ====================
+    async function recordReturn() {
+      const saleId = document.getElementById('returnSaleId').value.trim();
+      const qtyInput = document.getElementById('returnQty').value;
+      if (!saleId) return showMsg('returnMsg', 'Enter sale ID', 'error');
+
+      const { data: sale } = await supabase.from('transactions')
+        .select('*').eq('id', saleId).in('type', ['sale', 'credit_sale']).single();
+
+      if (!sale) return showMsg('returnMsg', 'Sale not found', 'error');
+
+      const qty = qtyInput ? parseInt(qtyInput) : sale.quantity;
+      if (qty > sale.quantity) return showMsg('returnMsg', 'Cannot return more than sold', 'error');
+
+      let returnAmount = (sale.amount / sale.quantity) * qty;
+
+      if (sale.product_id) {
+        const { data: product } = await supabase.from('products').select('*').eq('id', sale.product_id).single();
+        if (product) {
+          returnAmount = product.selling_price * qty;
+          await supabase.from('products').update({ quantity: product.quantity + qty }).eq('id', product.id);
+        }
+      }
+
+      await supabase.from('transactions').insert({
+        type: 'return',
+        amount: returnAmount,
+        description: `Return of ${qty} items from sale ${saleId.slice(0,8)}`,
+        product_id: sale.product_id,
+        quantity: qty,
+        related_id: saleId,
+        payment_status: 'paid'
+      });
+
+      showMsg('returnMsg', `Return of ${formatNaira(returnAmount)} recorded`);
+      document.getElementById('returnSaleId').value = '';
+      document.getElementById('returnQty').value = '';
+    }
+
+    // ==================== CREDIT PAYMENT ====================
+    async function recordCreditPayment() {
+      const saleId = document.getElementById('creditSaleId').value.trim();
+      const amount = parseFloat(document.getElementById('creditAmount').value);
+      if (!saleId || !amount || amount <= 0) return showMsg('creditMsg', 'Enter sale ID and amount', 'error');
+
+      const { data: sale } = await supabase.from('transactions')
+        .select('*').eq('id', saleId).eq('type', 'credit_sale').single();
+
+      if (!sale) return showMsg('creditMsg', 'Credit sale not found', 'error');
+
+      const { data: payments } = await supabase.from('transactions')
+        .select('amount').eq('related_id', saleId).eq('type', 'credit_payment');
+
+      const paid = payments?.reduce((s, p) => s + Number(p.amount), 0) || 0;
+      const remaining = sale.amount - paid;
+
+      if (amount > remaining + 0.01) {
+        return showMsg('creditMsg', `Only ${formatNaira(remaining)} remaining`, 'error');
+      }
+
+      await supabase.from('transactions').insert({
+        type: 'credit_payment',
+        amount,
+        description: `Payment for credit sale ${saleId.slice(0,8)}`,
+        related_id: saleId,
+        payment_status: 'paid'
+      });
+
+      // Update status
+      const newStatus = Math.abs(amount - remaining) < 0.01 ? 'paid' : 'partial';
+      await supabase.from('transactions').update({ payment_status: newStatus }).eq('id', saleId);
+
+      showMsg('creditMsg', `Payment of ${formatNaira(amount)} recorded`);
+      document.getElementById('creditSaleId').value = '';
+      document.getElementById('creditAmount').value = '';
+    }
+
+    // ==================== INVENTORY ====================
+    async function loadInventory() {
+      const { data } = await supabase.from('products').select('*').order('name');
+      const box = document.getElementById('inventoryTable');
+      if (!data?.length) {
+        box.innerHTML = '<div class="empty">No products in inventory</div>';
+        return;
+      }
+      let total = 0;
+      let html = `<table>
+        <tr><th>Name</th><th>Qty</th><th>Buy</th><th>Sell</th><th>Value</th></tr>`;
+      data.forEach(p => {
+        const value = p.quantity * p.purchase_price;
+        total += value;
+        html += `<tr>
+          <td>${p.name}</td>
+          <td>${p.quantity} ${p.unit}</td>
+          <td>${formatNaira(p.purchase_price)}</td>
+          <td>${formatNaira(p.selling_price)}</td>
+          <td>${formatNaira(value)}</td>
+        </tr>`;
+      });
+      html += `</table><p style="margin-top:12px;font-weight:700;">Total Inventory Value: ${formatNaira(total)}</p>`;
+      box.innerHTML = html;
+    }
+
+    // ==================== DASHBOARD ====================
+    async function loadDashboard() {
+      const [{ data: settings }, { data: transactions }, { data: products }] = await Promise.all([
+        supabase.from('business_settings').select('capital').eq('id', 1).single(),
+        supabase.from('transactions').select('*'),
+        supabase.from('products').select('*')
+      ]);
+
+      const capital = settings?.capital || 0;
+      let sales = 0, creditSales = 0, creditPayments = 0, expenses = 0, returns = 0, cogs = 0;
+
+      const productMap = {};
+      products?.forEach(p => productMap[p.id] = p);
+
+      transactions?.forEach(t => {
+        const amt = Number(t.amount);
+        if (t.type === 'sale') {
+          sales += amt;
+          if (t.product_id && productMap[t.product_id]) {
+            cogs += productMap[t.product_id].purchase_price * t.quantity;
+          }
+        } else if (t.type === 'credit_sale') {
+          creditSales += amt;
+          if (t.product_id && productMap[t.product_id]) {
+            cogs += productMap[t.product_id].purchase_price * t.quantity;
+          }
+        } else if (t.type === 'credit_payment') creditPayments += amt;
+        else if (t.type === 'expense') expenses += amt;
+        else if (t.type === 'return') returns += amt;
+      });
+const netSales = sales + creditPayments - returns;
+      const grossProfit = (sales + creditSales - returns) - cogs;
+      const netProfit = netSales - expenses;
+      const balance = capital + netProfit;
+      const outstanding = creditSales - creditPayments;
+      const margin = netSales > 0 ? (netProfit / netSales * 100) : 0;
+
+      document.getElementById('metrics').innerHTML = `
+        <div class="metric"><div class="label">Capital</div><div class="value">${formatNaira(capital)}</div></div>
+        <div class="metric"><div class="label">Cash Sales</div><div class="value">${formatNaira(sales)}</div></div>
+        <div class="metric"><div class="label">Credit Sales</div><div class="value">${formatNaira(creditSales)}</div></div>
+        <div class="metric"><div class="label">Payments Received</div><div class="value">${formatNaira(creditPayments)}</div></div>
+        <div class="metric"><div class="label">Expenses</div><div class="value">${formatNaira(expenses)}</div></div>
+        <div class="metric"><div class="label">Returns</div><div class="value">${formatNaira(returns)}</div></div>
+        <div class="metric"><div class="label">Gross Profit</div><div class="value">${formatNaira(grossProfit)}</div></div>
+        <div class="metric ${netProfit >= 0 ? 'profit' : 'loss'}">
+          <div class="label">Net Profit / Loss</div>
+          <div class="value">${formatNaira(netProfit)}</div>
+        </div>
+        <div class="metric"><div class="label">Current Balance</div><div class="value">${formatNaira(balance)}</div></div>
+        <div class="metric"><div class="label">Outstanding Credit</div><div class="value">${formatNaira(outstanding)}</div></div>
+        <div class="metric"><div class="label">Profit Margin</div><div class="value">${margin.toFixed(1)}%</div></div>
+      `;
+
+      let statusClass, statusText, comment;
+      if (netProfit > 0) {
+        if (margin >= 20) { statusClass = 'excellent'; statusText = 'EXCELLENT 🚀'; comment = 'Strong profit and healthy margins!'; }
+        else if (margin >= 10) { statusClass = 'good'; statusText = 'GOOD ✅'; comment = 'Business is profitable.'; }
+        else { statusClass = 'fair'; statusText = 'FAIR ⚠'; comment = 'Making profit but margins are thin.'; }
+      } else {
+        statusClass = 'loss'; statusText = 'LOSS ❌'; comment = 'Business is currently making a loss.';
+      }
+
+      document.getElementById('statusBox').innerHTML = `
+        <div style="text-align:center;">
+          <span class="status \( {statusClass}"> \){statusText}</span>
+          <p style="margin-top:8px;">${comment}</p>
+        </div>`;
+    }
+
+    // Load dashboard on start
+    loadDashboard();
+  </script>
+</body>
+</html>
