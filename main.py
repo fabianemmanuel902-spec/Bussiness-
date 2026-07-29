@@ -1,54 +1,55 @@
 """
-Business Profit Calculation Application
-A comprehensive system for tracking business finances, inventory, and progress.
+Business Profit Calculator (Naira Version)
+Tracks capital, sales, expenses, returns, credit sales and business progress.
 """
 
 import json
-import datetime
 import os
-from typing import List, Dict, Optional, Tuple, Union
+import uuid
+from datetime import datetime
 from dataclasses import dataclass, asdict
 from enum import Enum
-import uuid
+from typing import Dict, List, Optional
 
-# ==================== DATA MODELS ====================
+
+# ==================== ENUMS ====================
 
 class TransactionType(Enum):
-    """Types of financial transactions"""
     CAPITAL = "capital"
     SALE = "sale"
-    EXPENSE = "expense"
-    RETURN = "return"
     CREDIT_SALE = "credit_sale"
     CREDIT_PAYMENT = "credit_payment"
-    GOODS_RETURN = "goods_return"
+    EXPENSE = "expense"
+    RETURN = "return"
+
 
 class PaymentStatus(Enum):
-    """Payment status for transactions"""
     PAID = "paid"
     UNPAID = "unpaid"
     PARTIAL = "partial"
 
+
+# ==================== DATA MODELS ====================
+
 @dataclass
 class Product:
-    """Represents a product/item in inventory"""
     id: str
     name: str
-    purchase_price: float  # Cost to business
-    selling_price: float  # Price to customer
+    purchase_price: float
+    selling_price: float
     quantity: int
-    unit: str = "pieces"
-    
-    def to_dict(self) -> Dict:
+    unit: str = "pcs"
+
+    def to_dict(self):
         return asdict(self)
-    
+
     @classmethod
-    def from_dict(cls, data: Dict) -> 'Product':
+    def from_dict(cls, data):
         return cls(**data)
+
 
 @dataclass
 class Transaction:
-    """Represents a financial transaction"""
     id: str
     type: TransactionType
     amount: float
@@ -57,465 +58,428 @@ class Transaction:
     product_id: Optional[str] = None
     quantity: int = 0
     payment_status: PaymentStatus = PaymentStatus.PAID
-    related_transaction_id: Optional[str] = None  # For returns/credits
-    
-    def to_dict(self) -> Dict:
+    related_id: Optional[str] = None
+
+    def to_dict(self):
         data = asdict(self)
-        data['type'] = self.type.value
-        data['payment_status'] = self.payment_status.value
+        data["type"] = self.type.value
+        data["payment_status"] = self.payment_status.value
         return data
-    
+
     @classmethod
-    def from_dict(cls, data: Dict) -> 'Transaction':
-        data['type'] = TransactionType(data['type'])
-        data['payment_status'] = PaymentStatus(data['payment_status'])
+    def from_dict(cls, data):
+        data["type"] = TransactionType(data["type"])
+        data["payment_status"] = PaymentStatus(data["payment_status"])
         return cls(**data)
 
-@dataclass
-class BusinessMetrics:
-    """Calculated business metrics"""
-    total_capital: float
-    total_sales: float
-    total_expenses: float
-    total_returns: float
-    total_credit_sales: float
-    total_credit_payments: float
-    net_profit: float
-    gross_profit: float
-    current_balance: float
-    outstanding_credits: float
-    profit_margin: float  # Percentage
 
-# ==================== BUSINESS LOGIC ====================
+# ==================== BUSINESS MANAGER ====================
 
-class BusinessFinanceManager:
-    """Main class managing all business financial operations"""
-    
-    def __init__(self, data_file: str = "business_data.json"):
-        self.data_file = data_file
+class BusinessManager:
+    def __init__(self, filename: str = "business_data.json"):
+        self.filename = filename
+        self.capital = 0.0
         self.products: Dict[str, Product] = {}
         self.transactions: List[Transaction] = []
-        self.capital: float = 0.0
-        
-        self.load_data()
-    
-    def load_data(self) -> None:
-        """Load data from JSON file"""
-        if os.path.exists(self.data_file):
-            try:
-                with open(self.data_file, 'r') as f:
-                    data = json.load(f)
-                    
-                self.capital = data.get('capital', 0.0)
-                
-                # Load products
-                self.products = {
-                    pid: Product.from_dict(pdata) 
-                    for pid, pdata in data.get('products', {}).items()
-                }
-                
-                # Load transactions
-                self.transactions = [
-                    Transaction.from_dict(tdata) 
-                    for tdata in data.get('transactions', [])
-                ]
-                
-                print(f"Loaded {len(self.products)} products and {len(self.transactions)} transactions")
-            except Exception as e:
-                print(f"Error loading data: {e}. Starting fresh.")
-    
-    def save_data(self) -> None:
-        """Save data to JSON file"""
-        data = {
-            'capital': self.capital,
-            'products': {pid: p.to_dict() for pid, p in self.products.items()},
-            'transactions': [t.to_dict() for t in self.transactions]
-        }
-        
+        self.load()
+
+    def load(self):
+        if not os.path.exists(self.filename):
+            return
         try:
-            with open(self.data_file, 'w') as f:
-                json.dump(data, f, indent=2)
-            print("Data saved successfully")
+            with open(self.filename, "r") as f:
+                data = json.load(f)
+            self.capital = data.get("capital", 0.0)
+            self.products = {
+                pid: Product.from_dict(p)
+                for pid, p in data.get("products", {}).items()
+            }
+            self.transactions = [
+                Transaction.from_dict(t) for t in data.get("transactions", [])
+            ]
+            print(f"✓ Loaded {len(self.products)} products and {len(self.transactions)} transactions")
         except Exception as e:
-            print(f"Error saving data: {e}")
-    
-    def set_capital(self, amount: float) -> None:
-        """Set initial business capital"""
+            print(f"⚠ Error loading data: {e}. Starting fresh.")
+
+    def save(self):
+        data = {
+            "capital": self.capital,
+            "products": {pid: p.to_dict() for pid, p in self.products.items()},
+            "transactions": [t.to_dict() for t in self.transactions],
+        }
+        with open(self.filename, "w") as f:
+            json.dump(data, f, indent=2)
+        print("✓ Data saved")
+
+    def set_capital(self, amount: float):
         if amount <= 0:
-            raise ValueError("Capital must be positive")
-        
-        # Create capital transaction
-        transaction = Transaction(
+            raise ValueError("Capital must be greater than 0")
+        self.capital = amount
+        t = Transaction(
             id=str(uuid.uuid4()),
             type=TransactionType.CAPITAL,
             amount=amount,
-            description=f"Initial business capital",
-            date=datetime.datetime.now().isoformat()
+            description="Initial / Updated Capital",
+            date=datetime.now().isoformat(),
         )
-        
-        self.capital = amount
-        self.transactions.append(transaction)
-        self.save_data()
-        print(f"Capital set to ${amount:.2f}")
-    
-    def add_product(self, name: str, purchase_price: float, 
-                   selling_price: float, quantity: int, unit: str = "pieces") -> str:
-        """Add a new product to inventory"""
-        product_id = str(uuid.uuid4())
-        product = Product(
-            id=product_id,
-            name=name,
-            purchase_price=purchase_price,
-            selling_price=selling_price,
-            quantity=quantity,
-            unit=unit
-        )
-        
-        self.products[product_id] = product
-        
-        # Record expense for purchased goods
-        expense_amount = purchase_price * quantity
-        expense_transaction = Transaction(
+        self.transactions.append(t)
+        self.save()
+        print(f"✓ Capital set to ₦{amount:,.2f}")
+
+    def add_product(self, name: str, purchase_price: float, selling_price: float, qty: int, unit: str = "pcs"):
+        if purchase_price < 0 or selling_price < 0 or qty < 0:
+            raise ValueError("Prices and quantity cannot be negative")
+        pid = str(uuid.uuid4())
+        product = Product(pid, name, purchase_price, selling_price, qty, unit)
+        self.products[pid] = product
+
+        # Record the cost of buying the goods as an expense
+        cost = purchase_price * qty
+        t = Transaction(
             id=str(uuid.uuid4()),
             type=TransactionType.EXPENSE,
-            amount=expense_amount,
-            description=f"Purchased {quantity} {unit} of {name}",
-            date=datetime.datetime.now().isoformat(),
-            product_id=product_id,
-            quantity=quantity
+            amount=cost,
+            description=f"Bought {qty} {unit} of {name}",
+            date=datetime.now().isoformat(),
+            product_id=pid,
+            quantity=qty,
         )
-        
-        self.transactions.append(expense_transaction)
-        self.save_data()
-        print(f"Added product: {name} (Quantity: {quantity})")
-        return product_id
-    
-    def record_sale(self, product_id: str, quantity: int, 
-                   is_credit: bool = False) -> str:
-        """Record a sale transaction"""
+        self.transactions.append(t)
+        self.save()
+        print(f"✓ Product added: {name} ({qty} {unit})")
+        return pid
+
+    def record_sale(self, product_id: str, qty: int, is_credit: bool = False):
         if product_id not in self.products:
-            raise ValueError(f"Product {product_id} not found")
-        
+            raise ValueError("Product not found")
         product = self.products[product_id]
-        
-        if product.quantity < quantity:
-            raise ValueError(f"Insufficient stock. Available: {product.quantity}")
-        
-        # Update inventory
-        product.quantity -= quantity
-        
-        # Calculate sale amount
-        sale_amount = product.selling_price * quantity
-        
-        # Create transaction
-        transaction_type = TransactionType.CREDIT_SALE if is_credit else TransactionType.SALE
-        payment_status = PaymentStatus.UNPAID if is_credit else PaymentStatus.PAID
-        
-        transaction = Transaction(
+        if product.quantity < qty:
+            raise ValueError(f"Not enough stock. Available: {product.quantity}")
+
+        product.quantity -= qty
+        amount = product.selling_price * qty
+
+        t_type = TransactionType.CREDIT_SALE if is_credit else TransactionType.SALE
+        status = PaymentStatus.UNPAID if is_credit else PaymentStatus.PAID
+
+        t = Transaction(
             id=str(uuid.uuid4()),
-            type=transaction_type,
-            amount=sale_amount,
-            description=f"Sold {quantity} {product.unit} of {product.name}",
-            date=datetime.datetime.now().isoformat(),
+            type=t_type,
+            amount=amount,
+            description=f"Sold {qty} {product.unit} of {product.name}",
+            date=datetime.now().isoformat(),
             product_id=product_id,
-            quantity=quantity,
-            payment_status=payment_status
+            quantity=qty,
+            payment_status=status,
         )
-        
-        self.transactions.append(transaction)
-        self.save_data()
-        
-        status_msg = "on credit" if is_credit else "for cash"
-        print(f"Sale recorded: {quantity} {product.unit} of {product.name} {status_msg} - ${sale_amount:.2f}")
-        return transaction.id
-    
-    def record_expense(self, amount: float, description: str) -> str:
-        """Record a business expense"""
+        self.transactions.append(t)
+        self.save()
+
+        kind = "on CREDIT" if is_credit else "CASH"
+        print(f"✓ Sale recorded ({kind}): ₦{amount:,.2f}")
+        return t.id
+
+    def record_expense(self, amount: float, description: str):
         if amount <= 0:
-            raise ValueError("Expense amount must be positive")
-        
-        transaction = Transaction(
+            raise ValueError("Expense must be positive")
+        t = Transaction(
             id=str(uuid.uuid4()),
             type=TransactionType.EXPENSE,
             amount=amount,
             description=description,
-            date=datetime.datetime.now().isoformat()
+            date=datetime.now().isoformat(),
         )
-        
-        self.transactions.append(transaction)
-        self.save_data()
-        print(f"Expense recorded: {description} - ${amount:.2f}")
-        return transaction.id
-    
-    def record_return(self, sale_transaction_id: str, quantity: int = None) -> str:
-        """Record a return of goods"""
-        # Find the original sale transaction
-        original_sale = None
-        for t in self.transactions:
-            if t.id == sale_transaction_id and t.type in [TransactionType.SALE, TransactionType.CREDIT_SALE]:
-                original_sale = t
-                break
-        
-        if not original_sale:
-            raise ValueError(f"Sale transaction {sale_transaction_id} not found")
-        
-        if quantity is None:
-            quantity = original_sale.quantity
-        
-        if quantity > original_sale.quantity:
-            raise ValueError(f"Cannot return more than sold. Sold: {original_sale.quantity}")
-        
-        # Calculate return amount
-        product = self.products.get(original_sale.product_id)
-        return_amount = (product.selling_price * quantity) if product else (original_sale.amount / original_sale.quantity * quantity)
-        
-        # Update inventory if product exists
-        if product and original_sale.product_id:
-            product.quantity += quantity
-        
-        # Create return transaction
-        transaction = Transaction(
+        self.transactions.append(t)
+        self.save()
+        print(f"✓ Expense recorded: ₦{amount:,.2f}")
+        return t.id
+
+    def record_return(self, sale_id: str, qty: Optional[int] = None):
+        sale = next((t for t in self.transactions if t.id == sale_id and t.type in (
+            TransactionType.SALE, TransactionType.CREDIT_SALE)), None)
+        if not sale:
+            raise ValueError("Sale transaction not found")
+
+        if qty is None:
+            qty = sale.quantity
+        if qty > sale.quantity:
+            raise ValueError("Cannot return more than was sold")
+
+        product = self.products.get(sale.product_id)
+        if product:
+            product.quantity += qty
+            return_amount = product.selling_price * qty
+        else:
+            return_amount = (sale.amount / sale.quantity) * qty
+
+        t = Transaction(
             id=str(uuid.uuid4()),
             type=TransactionType.RETURN,
             amount=return_amount,
-            description=f"Return of {quantity} items from sale {sale_transaction_id}",
-            date=datetime.datetime.now().isoformat(),
-            product_id=original_sale.product_id,
-            quantity=quantity,
-            payment_status=PaymentStatus.PAID,
-            related_transaction_id=sale_transaction_id
+            description=f"Return of {qty} items from sale {sale_id[:8]}",
+            date=datetime.now().isoformat(),
+            product_id=sale.product_id,
+            quantity=qty,
+            related_id=sale_id,
         )
-        
-        self.transactions.append(transaction)
-        self.save_data()
-        print(f"Return recorded: ${return_amount:.2f} for {quantity} items")
-        return transaction.id
-    
-    def record_credit_payment(self, credit_sale_id: str, amount: float) -> str:
-        """Record payment for a credit sale"""
-        # Find the credit sale
-        credit_sale = None
-        for t in self.transactions:
-            if t.id == credit_sale_id and t.type == TransactionType.CREDIT_SALE:
-                credit_sale = t
-                break
-        
-        if not credit_sale:
-            raise ValueError(f"Credit sale {credit_sale_id} not found")
-        
-        # Calculate remaining amount
-        paid_amount = sum(
-            t.amount for t in self.transactions 
-            if t.related_transaction_id == credit_sale_id and t.type == TransactionType.CREDIT_PAYMENT
+        self.transactions.append(t)
+        self.save()
+        print(f"✓ Return recorded: ₦{return_amount:,.2f}")
+        return t.id
+
+    def record_credit_payment(self, credit_sale_id: str, amount: float):
+        sale = next((t for t in self.transactions
+                     if t.id == credit_sale_id and t.type == TransactionType.CREDIT_SALE), None)
+        if not sale:
+            raise ValueError("Credit sale not found")
+
+        already_paid = sum(
+            t.amount for t in self.transactions
+            if t.related_id == credit_sale_id and t.type == TransactionType.CREDIT_PAYMENT
         )
-        
-        remaining = credit_sale.amount - paid_amount
-        
-        if amount > remaining:
-            raise ValueError(f"Payment exceeds remaining amount. Remaining: ${remaining:.2f}")
-        
-        # Create payment transaction
-        transaction = Transaction(
+        remaining = sale.amount - already_paid
+
+        if amount > remaining + 0.01:
+            raise ValueError(f"Payment exceeds remaining balance (₦{remaining:,.2f})")
+
+        t = Transaction(
             id=str(uuid.uuid4()),
             type=TransactionType.CREDIT_PAYMENT,
             amount=amount,
-            description=f"Payment for credit sale {credit_sale_id}",
-            date=datetime.datetime.now().isoformat(),
-            related_transaction_id=credit_sale_id
+            description=f"Payment for credit sale {credit_sale_id[:8]}",
+            date=datetime.now().isoformat(),
+            related_id=credit_sale_id,
         )
-        
-        # Update payment status
-        if amount == remaining:
-            credit_sale.payment_status = PaymentStatus.PAID
+        self.transactions.append(t)
+
+        if abs(amount - remaining) < 0.01:
+            sale.payment_status = PaymentStatus.PAID
         else:
-            credit_sale.payment_status = PaymentStatus.PARTIAL
-        
-        self.transactions.append(transaction)
-        self.save_data()
-        print(f"Credit payment recorded: ${amount:.2f}")
-        return transaction.id
-    
-    def calculate_metrics(self) -> BusinessMetrics:
-        """Calculate all business metrics"""
-        # Initialize totals
-        total_sales = 0.0
-        total_expenses = 0.0
-        total_returns = 0.0
-        total_credit_sales = 0.0
-        total_credit_payments = 0.0
-        
-        # Calculate totals from transactions
-        for transaction in self.transactions:
-            if transaction.type == TransactionType.SALE:
-                total_sales += transaction.amount
-            elif transaction.type == TransactionType.EXPENSE:
-                total_expenses += transaction.amount
-            elif transaction.type == TransactionType.RETURN:
-                total_returns += transaction.amount
-            elif transaction.type == TransactionType.CREDIT_SALE:
-                total_credit_sales += transaction.amount
-            elif transaction.type == TransactionType.CREDIT_PAYMENT:
-                total_credit_payments += transaction.amount
-        
-        # Calculate cost of goods sold (COGS)
+            sale.payment_status = PaymentStatus.PARTIAL
+
+        self.save()
+        print(f"✓ Credit payment recorded: ₦{amount:,.2f}")
+        return t.id
+
+    def get_metrics(self):
+        sales = 0.0
+        credit_sales = 0.0
+        credit_payments = 0.0
+        expenses = 0.0
+        returns = 0.0
         cogs = 0.0
-        for transaction in self.transactions:
-            if transaction.type == TransactionType.SALE and transaction.product_id:
-                product = self.products.get(transaction.product_id)
-                if product:
-                    cogs += product.purchase_price * transaction.quantity
-        
-        # Calculate gross profit
-        gross_profit = total_sales - cogs
-        
-        # Calculate net profit
-        net_profit = (total_sales + total_credit_payments) - (total_expenses + total_returns)
-        
-        # Calculate current balance
-        current_balance = self.capital + net_profit
-        
-        # Calculate outstanding credits
-        outstanding_credits = total_credit_sales - total_credit_payments
-        
-        # Calculate profit margin
-        revenue = total_sales + total_credit_payments
-        profit_margin = (net_profit / revenue * 100) if revenue > 0 else 0.0
-        
-        return BusinessMetrics(
-            total_capital=self.capital,
-            total_sales=total_sales,
-            total_expenses=total_expenses,
-            total_returns=total_returns,
-            total_credit_sales=total_credit_sales,
-            total_credit_payments=total_credit_payments,
-            net_profit=net_profit,
-            gross_profit=gross_profit,
-            current_balance=current_balance,
-            outstanding_credits=outstanding_credits,
-            profit_margin=profit_margin
-        )
-    
-    def get_inventory_status(self) -> List[Dict]:
-        """Get current inventory status"""
-        inventory = []
-        for product in self.products.values():
-            # Calculate total value
-            total_value = product.quantity * product.purchase_price
-            
-            inventory.append({
-                'id': product.id,
-                'name': product.name,
-                'quantity': product.quantity,
-                'unit': product.unit,
-                'purchase_price': product.purchase_price,
-                'selling_price': product.selling_price,
-                'total_value': total_value,
-                'profit_per_unit': product.selling_price - product.purchase_price
-            })
-        
-        return inventory
-    
-    def get_transaction_history(self, limit: int = 50) -> List[Transaction]:
-        """Get recent transactions"""
-        return sorted(self.transactions, key=lambda x: x.date, reverse=True)[:limit]
-    
-    def generate_progress_report(self) -> Dict:
-        """Generate comprehensive business progress report"""
-        metrics = self.calculate_metrics()
-        inventory = self.get_inventory_status()
-        recent_transactions = self.get_transaction_history(10)
-        
-        # Calculate business health indicators
-        liquidity_ratio = metrics.current_balance / (metrics.total_expenses / 30 if metrics.total_expenses > 0 else 1)
-        
-        # Determine business progress status
-        if metrics.net_profit > 0:
-            if metrics.profit_margin > 20:
-                progress_status = "EXCELLENT"
-                progress_message = "Business is highly profitable with strong margins"
-            elif metrics.profit_margin > 10:
-                progress_status = "GOOD"
-                progress_message = "Business is profitable with reasonable margins"
-            else:
-                progress_status = "FAIR"
-                progress_message = "Business is profitable but margins are thin"
-        else:
-            progress_status = "NEEDS ATTENTION"
-            progress_message = "Business is operating at a loss"
-        
-        report = {
-            'report_date': datetime.datetime.now().isoformat(),
-            'business_metrics': asdict(metrics),
-            'inventory_summary': {
-                'total_items': len(inventory),
-                'total_inventory_value': sum(item['total_value'] for item in inventory),
-                'low_stock_items': [item for item in inventory if item['quantity'] < 10]
-            },
-            'financial_health': {
-                'liquidity_ratio': liquidity_ratio,
-                'profit_margin': metrics.profit_margin,
-                'outstanding_credits_ratio': (metrics.outstanding_credits / metrics.total_sales * 100) if metrics.total_sales > 0 else 0
-            },
-            'progress_assessment': {
-                'status': progress_status,
-                'message': progress_message,
-                'recommendations': self._generate_recommendations(metrics, inventory)
-            },
-            'recent_activity': [t.to_dict() for t in recent_transactions]
+
+        for t in self.transactions:
+            if t.type == TransactionType.SALE:
+                sales += t.amount
+                if t.product_id and t.product_id in self.products:
+                    cogs += self.products[t.product_id].purchase_price * t.quantity
+            elif t.type == TransactionType.CREDIT_SALE:
+                credit_sales += t.amount
+                if t.product_id and t.product_id in self.products:
+                    cogs += self.products[t.product_id].purchase_price * t.quantity
+            elif t.type == TransactionType.CREDIT_PAYMENT:
+                credit_payments += t.amount
+            elif t.type == TransactionType.EXPENSE:
+                expenses += t.amount
+            elif t.type == TransactionType.RETURN:
+                returns += t.amount
+
+        net_sales = sales + credit_payments - returns
+        gross_profit = (sales + credit_sales - returns) - cogs
+        net_profit = net_sales - expenses
+        balance = self.capital + net_profit
+        outstanding = credit_sales - credit_payments
+        margin = (net_profit / net_sales * 100) if net_sales > 0 else 0.0
+
+        return {
+            "capital": self.capital,
+            "total_sales": sales,
+            "credit_sales": credit_sales,
+            "credit_payments": credit_payments,
+            "expenses": expenses,
+            "returns": returns,
+            "cogs": cogs,
+            "gross_profit": gross_profit,
+            "net_profit": net_profit,
+            "current_balance": balance,
+            "outstanding_credits": outstanding,
+            "profit_margin": margin,
         }
-        
-        return report
-    
-    def _generate_recommendations(self, metrics: BusinessMetrics, inventory: List[Dict]) -> List[str]:
-        """Generate business recommendations based on metrics"""
-        recommendations = []
-        
-        if metrics.outstanding_credits > metrics.total_sales * 0.3:
-            recommendations.append("High amount of outstanding credits. Consider stricter credit policies.")
-        
-        if metrics.profit_margin < 10:
-            recommendations.append("Low profit margin. Consider increasing prices or reducing costs.")
-        
-        low_stock = [item for item in inventory if item['quantity'] < 10]
-        if low_stock:
-            recommendations.append(f"{len(low_stock)} items are low in stock. Consider restocking.")
-        
-        if metrics.total_expenses > metrics.total_sales * 0.7:
-            recommendations.append("High expense ratio. Review and optimize operational costs.")
-        
-        if not recommendations:
-            recommendations.append("Business is performing well. Continue current operations.")
-        
-        return recommendations
 
-# ==================== USER INTERFACE ====================
+    def progress_report(self):
+        m = self.get_metrics()
+        print("\n" + "=" * 55)
+        print("           BUSINESS PROGRESS REPORT")
+        print("=" * 55)
+        print(f"Capital Invested      : ₦{m['capital']:,.2f}")
+        print(f"Cash Sales            : ₦{m['total_sales']:,.2f}")
+        print(f"Credit Sales          : ₦{m['credit_sales']:,.2f}")
+        print(f"Credit Payments       : ₦{m['credit_payments']:,.2f}")
+        print(f"Goods Returns         : ₦{m['returns']:,.2f}")
+        print(f"Total Expenses        : ₦{m['expenses']:,.2f}")
+        print(f"Cost of Goods Sold    : ₦{m['cogs']:,.2f}")
+        print("-" * 55)
+        print(f"Gross Profit          : ₦{m['gross_profit']:,.2f}")
+        print(f"Net Profit / Loss     : ₦{m['net_profit']:,.2f}")
+        print(f"Current Balance       : ₦{m['current_balance']:,.2f}")
+        print(f"Outstanding Credits   : ₦{m['outstanding_credits']:,.2f}")
+        print(f"Profit Margin         : {m['profit_margin']:.1f}%")
+        print("-" * 55)
 
-class BusinessAppCLI:
-    """Command-line interface for the business application"""
-    
+        if m["net_profit"] > 0:
+            if m["profit_margin"] >= 20:
+                status = "EXCELLENT 🚀"
+                msg = "Strong profit and healthy margins. Keep it up!"
+            elif m["profit_margin"] >= 10:
+                status = "GOOD ✅"
+                msg = "Business is profitable. Look for ways to improve margins."
+            else:
+                status = "FAIR ⚠"
+                msg = "Making profit but margins are thin. Review costs and prices."
+        else:
+            status = "LOSS ❌"
+            msg = "Business is currently making a loss. Review expenses and sales."
+
+        print(f"Status                : {status}")
+        print(f"Comment               : {msg}")
+        print("=" * 55)
+
+
+# ==================== CLI INTERFACE ====================
+
+class App:
     def __init__(self):
-        self.manager = BusinessFinanceManager()
-        self.running = True
-    
-    def display_menu(self):
-        """Display main menu"""
-        print("\n" + "="*50)
-        print("BUSINESS PROFIT CALCULATION APPLICATION")
-        print("="*50)
-        print("1. Set Initial Capital")
-        print("2. Add Product to Inventory")
-        print("3. Record Sale")
-        print("4. Record Expense")
-        print("5. Record Return")
-        print("6. Record Credit Payment")
-        print("7. View Business Metrics")
-        print("8. View Inventory")
-        print("9. View Transaction History")
-        print("10. Generate Progress Report")
-        print("11. Save Data")
-        print("12. Exit")
-        print("="*50)
-    
+        self.bm = BusinessManager()
+
+    def menu(self):
+        print("\n" + "=" * 50)
+        print("     BUSINESS PROFIT CALCULATOR (₦)")
+        print("=" * 50)
+        print("1.  Set / Update Capital")
+        print("2.  Add Product to Inventory")
+        print("3.  Record Cash Sale")
+        print("4.  Record Credit Sale")
+        print("5.  Record Expense")
+        print("6.  Record Goods Return")
+        print("7.  Record Credit Payment")
+        print("8.  View Inventory")
+        print("9.  View Business Metrics")
+        print("10. Full Progress Report")
+        print("11. Exit")
+        print("=" * 50)
+
     def run(self):
-        """Main application loop"""
-        print
+        while True:
+            self.menu()
+            choice = input("Choose option (1-11): ").strip()
+
+            try:
+                if choice == "1":
+                    amount = float(input("Enter capital amount (₦): "))
+                    self.bm.set_capital(amount)
+
+                elif choice == "2":
+                    name = input("Product name: ").strip()
+                    pp = float(input("Purchase price (₦): "))
+                    sp = float(input("Selling price (₦): "))
+                    qty = int(input("Quantity: "))
+                    unit = input("Unit (e.g. pcs, kg, packs) [pcs]: ").strip() or "pcs"
+                    self.bm.add_product(name, pp, sp, qty, unit)
+
+                elif choice == "3":
+                    self._list_products()
+                    pid = input("Product ID: ").strip()
+                    qty = int(input("Quantity sold: "))
+                    self.bm.record_sale(pid, qty, is_credit=False)
+
+                elif choice == "4":
+                    self._list_products()
+                    pid = input("Product ID: ").strip()
+                    qty = int(input("Quantity sold on credit: "))
+                    self.bm.record_sale(pid, qty, is_credit=True)
+
+                elif choice == "5":
+                    amount = float(input("Expense amount (₦): "))
+                    desc = input("Description: ").strip()
+                    self.bm.record_expense(amount, desc)
+
+                elif choice == "6":
+                    sale_id = input("Original Sale Transaction ID: ").strip()
+                    qty_input = input("Quantity to return (leave blank for all): ").strip()
+                    qty = int(qty_input) if qty_input else None
+                    self.bm.record_return(sale_id, qty)
+
+                elif choice == "7":
+                    credit_id = input("Credit Sale Transaction ID: ").strip()
+                    amount = float(input("Payment amount (₦): "))
+                    self.bm.record_credit_payment(credit_id, amount)
+
+                elif choice == "8":
+                    self._show_inventory()
+
+                elif choice == "9":
+                    self._show_metrics()
+
+                elif choice == "10":
+                    self.bm.progress_report()
+
+                elif choice == "11":
+                    print("\nThank you for using Business Profit Calculator. Goodbye!")
+                    break
+
+                else:
+                    print("Invalid choice. Please try again.")
+
+            except ValueError as e:
+                print(f"❌ Error: {e}")
+            except Exception as e:
+                print(f"❌ Unexpected error: {e}")
+
+    def _list_products(self):
+        if not self.bm.products:
+            print("No products yet.")
+            return
+        print("\nAvailable Products:")
+        for p in self.bm.products.values():
+            print(f"  ID: {p.id[:8]}... | {p.name} | Stock: {p.quantity} {p.unit} | Sell: ₦{p.selling_price:,.2f}")
+
+    def _show_inventory(self):
+        if not self.bm.products:
+            print("Inventory is empty.")
+            return
+        print("\n" + "-" * 75)
+        print(f"{'Name':<20} {'Qty':>8} {'Unit':<8} {'Buy (₦)':>12} {'Sell (₦)':>12} {'Value (₦)':>14}")
+        print("-" * 75)
+        total_value = 0
+        for p in self.bm.products.values():
+            value = p.quantity * p.purchase_price
+            total_value += value
+            print(f"{p.name:<20} {p.quantity:>8} {p.unit:<8} {p.purchase_price:>12,.2f} {p.selling_price:>12,.2f} {value:>14,.2f}")
+        print("-" * 75)
+        print(f"{'Total Inventory Value:':<50} ₦{total_value:,.2f}")
+
+    def _show_metrics(self):
+        m = self.bm.get_metrics()
+        print("\n" + "=" * 48)
+        print("         CURRENT BUSINESS METRICS")
+        print("=" * 48)
+        print(f"Capital               : ₦{m['capital']:,.2f}")
+        print(f"Cash Sales            : ₦{m['total_sales']:,.2f}")
+        print(f"Credit Sales          : ₦{m['credit_sales']:,.2f}")
+        print(f"Payments Received     : ₦{m['credit_payments']:,.2f}")
+        print(f"Returns               : ₦{m['returns']:,.2f}")
+        print(f"Expenses              : ₦{m['expenses']:,.2f}")
+        print(f"Cost of Goods Sold    : ₦{m['cogs']:,.2f}")
+        print("-" * 48)
+        print(f"Gross Profit          : ₦{m['gross_profit']:,.2f}")
+        print(f"Net Profit / Loss     : ₦{m['net_profit']:,.2f}")
+        print(f"Current Balance       : ₦{m['current_balance']:,.2f}")
+        print(f"Outstanding Credits   : ₦{m['outstanding_credits']:,.2f}")
+        print(f"Profit Margin         : {m['profit_margin']:.1f}%")
+        print("=" * 48)
+
+
+if __name__ == "__main__":
+    app = App()
+    app.run()
